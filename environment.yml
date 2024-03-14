@@ -1,0 +1,22 @@
+name: autophasemap
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib>=3.3.4
+  - numpy>=1.18.1
+  - pip
+  - python=3.8
+  - scikit-learn>=0.22.1
+  - scipy>=1.4.1
+  - pip:
+    - ray==1.13.0
+    - pygsp==0.5.1
+    - ortools>=9.4.1874
+    - mpltern==0.5.0
+    - ipykernel==6.25.0
+    - notebook==6.4.12 
+    - Cython==0.29.30 
+    - cffi==1.15.0 
+    - scikit-learn==0.24.1
+
+  
