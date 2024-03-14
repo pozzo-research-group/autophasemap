@@ -2,20 +2,22 @@ from setuptools import setup,find_packages
 import sys, os
 
 setup(name="autophasemap",
-      description="Polymer thermodynamic phase modelling",
+      description="Automatic Structure Phase Mapping from Functional Data",
       version='1.0',
       author='Kiran Vaddi',
       author_email='kiranvad@uw.edu',
       license='MIT',
-      python_requires='>=3.6',
-      install_requires=[],
+      python_requires='>=3.8',
+      install_requires=['numpy>=1.18.1','scipy', 'matplotlib', 
+      'Cython==0.29.30', 'cffi==1.15.0'],
       extras_require = {},
       packages=find_packages(),
       long_description=open('README.md').read(),
       long_description_content_type="text/markdown",
       classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
+        "Operating System :: Unix",
+        "Operating System :: MacOS",
+        "Operating System :: Microsoft :: Windows"
       ],
 )
