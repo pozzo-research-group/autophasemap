@@ -20,7 +20,7 @@ To install the package:
 
 ```bash
 pip install git+https://github.com/kiranvad/warping.git 
-pip install https://github.com/pozzo-research-group/autophasemap.git 
+pip install git+https://github.com/pozzo-research-group/autophasemap.git 
 ```
 
 A simple example using synthetic Gaussian functions as an example can be found in [this ](/example.ipynb)notebook. This example can be run on your local machine once the `autophasemap` package is installed using similar instructions as above.
