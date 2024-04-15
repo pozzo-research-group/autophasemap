@@ -97,7 +97,7 @@ def assign_clusters(data, d_amplitude, smoothen=True):
     
     return dist, labels
     
-def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=True):
+def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True):
     """Compute elastic kmeans 
     
     This function computes a elastic k-means based approximation of the template functions.
@@ -106,8 +106,8 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
     ===========
     data : Data class object 
         (see examples)
-    n_clusters : int
-        Number of template functions
+    random_sample : list
+        List of random samples drawn from the data set
     max_iter : int, default 100
         Maximum number of iterations to perform
     verbose : int, [1,2,3]
@@ -142,7 +142,7 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
     res = namedtuple("res", "templates gam_ik qik_gam fik_gam delta_n dist d_amplitude error")
     start = time.time()
     Q = [SRSF.to_srsf(fi) for fi in data.F]
-    random_sample = np.random.choice(np.arange(data.N), n_clusters)
+    n_clusters = random_sample.shape[0]
     eta = [Q[r] for r in random_sample]
 
     for n in range(max_iter):
@@ -203,7 +203,41 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
         
     return res(templates, gam_ik, qik_gam, fik_gam, delta_n, dist, d_amplitude, error)
     
+
+def _is_same_clustering(labels1, labels2, n_clusters):
+    """Check if two arrays of labels are the same up to a permutation of the labels
+
+    From : sklearn/cluster/_k_means_common.pyx#L317
     
+    """
+
+    mapping = np.full(fill_value=-1, shape=(n_clusters,), dtype=np.int32)
+
+    for i in range(labels1.shape[0]):
+        if mapping[labels1[i]] == -1:
+            mapping[labels1[i]] = labels2[i]
+        elif mapping[labels1[i]] != labels2[i]:
+            return False
+        
+    return True
+
+def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True):
+    best_error, best_labels = None, None
+    for i in range(n_runs):
+        if verbose>1:
+            print("Random init of %d/%d current error : %.2f"%(i, n_runs, best_error) )
+        random_sample = np.random.choice(np.arange(data.N), n_clusters)
+        res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen)
+        if best_error is None or (
+                res.error < best_error
+                and not _is_same_clustering(res.delta_n, best_labels, n_clusters)
+            ):
+                best_labels = res.delta_n
+                best_res = res
+                best_error = res.error
+
+    return best_res
+
 def amplitude_fpca(time, Q, F, n_components):
     
     mididx = int(np.round(time.shape[0] / 2))
