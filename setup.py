@@ -1,23 +1,34 @@
 from setuptools import setup,find_packages
 import sys, os
 
-setup(name="autophasemap",
-      description="Automatic Structure Phase Mapping from Functional Data",
-      version='1.0',
-      author='Kiran Vaddi',
-      author_email='kiranvad@uw.edu',
-      license='MIT',
-      python_requires='>=3.8',
-      install_requires=['numpy>=1.18.1','scipy', 'matplotlib', 'ray==2.10.0', 
-      'scikit-learn==0.22.1', 'Cython==0.29.30', 'cffi==1.15.0', 'pygsp==0.5.1', 'ortools>=9.4.1874'],
-      extras_require = {},
-      packages=find_packages(),
-      long_description=open('README.md').read(),
-      long_description_content_type="text/markdown",
-      classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: Unix",
-        "Operating System :: MacOS",
-        "Operating System :: Microsoft :: Windows"
-      ],
-)
+def parse_requirements_file(filename):
+    """Read the lines of the requirements file."""
+    with open(filename) as input_file:
+        return input_file.read().splitlines()
+    
+if __name__ == '__main__':
+    requirements = parse_requirements_file('requirements.txt')
+    install_requires = []
+    optional_dependencies = {}
+    
+    for requirement in requirements:
+            install_requires.append(requirement)  
+    setup(name="autophasemap",
+          description="Automatic Structure Phase Mapping from Functional Data",
+          version='1.0',
+          author='Kiran Vaddi',
+          author_email='kiranvad@uw.edu',
+          license='MIT',
+          python_requires='>=3.8',
+          install_requires=install_requires,
+          extras_require = {},
+          packages=find_packages(),
+          long_description=open('README.md').read(),
+          long_description_content_type="text/markdown",
+          classifiers=[
+            "Programming Language :: Python :: 3",
+            "Operating System :: Unix",
+            "Operating System :: MacOS",
+            "Operating System :: Microsoft :: Windows"
+          ],
+    )
