@@ -1,11 +1,8 @@
 import numpy as np
 from scipy import linalg
-import pdb
 import optimum_reparamN2 as orN2
 from scipy.interpolate import UnivariateSpline, interp1d
 from scipy.integrate import cumtrapz
-from collections import namedtuple
-import time, os, traceback, shutil, warnings
 
 class SquareRootSlopeFramework:
     """Square Root Slope Framework (SRSF)
@@ -108,7 +105,7 @@ class SquareRootSlopeFramework:
 
         return q_temp
         
-    def get_gamma(self, q1, q2, lam=0.0, grid_dim=7):
+    def get_gamma(self, q1, q2, lam=0.0, grid_dim=20):
         """Compute warping function given two SRSFs
         
         Parameters:

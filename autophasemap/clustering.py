@@ -224,8 +224,6 @@ def _is_same_clustering(labels1, labels2, n_clusters):
 def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True):
     best_error, best_labels = None, None
     for i in range(n_runs):
-        if verbose>1:
-            print("Random init of %d/%d current error : %.2f"%(i, n_runs, best_error) )
         random_sample = np.random.choice(np.arange(data.N), n_clusters)
         res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen)
         if best_error is None or (
@@ -235,6 +233,8 @@ def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen
                 best_labels = res.delta_n
                 best_res = res
                 best_error = res.error
+        if verbose>1:
+            print("Random init of %d/%d current error : %.2f"%(i, n_runs, best_error) )
 
     return best_res
 
