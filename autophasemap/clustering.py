@@ -242,10 +242,12 @@ def _is_same_clustering(labels1, labels2, n_clusters):
 
 def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True):
     best_error, best_labels = None, None
+    bic = []
     for i in range(n_runs):
         # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
         _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
         res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen)
+        bic.append(compute_BIC(data, res.fik_gam, res.qik_gam, res.delta_n))
         if best_error is None or (
                 res.error < best_error
                 and not _is_same_clustering(res.delta_n, best_labels, n_clusters)
@@ -256,7 +258,7 @@ def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen
         if verbose>1:
             print("Random init of %d/%d current error : %2.4f"%(i+1, n_runs, best_error) )
 
-    return best_res
+    return best_res, bic
 
 def amplitude_fpca(time, Q, F, n_components):
     
