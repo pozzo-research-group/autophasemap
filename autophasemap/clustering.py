@@ -59,6 +59,28 @@ def compute_cluster_distance(i, data, eta):
     return i, di, gam_i, qi_gam, fi_gam
 
 def process_step2a(results, data, n_clusters):
+    """Process results from ray cluster
+
+    Parameters
+    ----------
+    results : list
+        Output from parallel run
+    data : BaseDataSet
+        Dataset object of autophasemap
+    n_clusters : int
+        Number of clusters requested
+
+    Returns
+    -------
+    d_amplitude : np.ndarray (num_samples, n_clusters)
+        Amplitude distance of each sample to each template
+    gam_ik : np.ndarray (num_samples, n_clusters, n_domain)
+        Gamma function of each sample to each template
+    qik_gam : np.ndarray (num_samples, n_clusters, n_domain)
+        SRSF of each sample to each template gamma  
+    fik_gam : np.ndarray (num_samples, n_clusters, n_domain)
+        Warped function of original curve for each templated  
+    """
     d_amplitude = np.zeros((data.N, n_clusters))
     gam_ik = np.zeros((data.N,n_clusters, data.n_domain))
     qik_gam = np.zeros((data.N,n_clusters, data.n_domain))
@@ -73,11 +95,35 @@ def process_step2a(results, data, n_clusters):
     return d_amplitude, gam_ik, qik_gam, fik_gam
 
 @ray.remote
-def center_to_template(i, data, template, gam_inv):
+def center_to_template(i, data, template, gam_inv, **kwargs):
+    """Perform template centering for each warping function.
+
+    Parameters
+    ----------
+    i : int
+        Index of the samples in data
+    data : BaseDataSet
+        autophasemap base data set object
+    template : np.ndarray (n_domain, )
+        Teamplate function to which the centering needs to be performed
+    gam_inv : np.ndarray
+        inverse of the warping function
+
+    Returns
+    -------
+    i : int 
+        Index to data in BaseDataSet object
+    _gam : np.ndarray (n_domain, )
+        Gamma function centered
+    _qik_gam : np.ndarray (n_domain, )
+        centered SRSF of the sample function  
+    _fik_gam : np.ndarray (n_domain, )
+        Centered function 
+    """
     SRSF = SquareRootSlopeFramework(data.t)
     center = SRSF.warp_q_gamma(template, gam_inv)
     qi = SRSF.to_srsf(data.F[i])
-    _gam = SRSF.get_gamma(center, qi)
+    _gam = SRSF.get_gamma(center, qi, **kwargs)
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
     
@@ -116,7 +162,7 @@ def assign_clusters(data, d_amplitude, smoothen=True):
     
     return dist, labels
     
-def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True):
+def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, **kwargs):
     """Compute elastic kmeans 
     
     This function computes a elastic k-means based approximation of the template functions.
@@ -133,6 +179,9 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         Flag to print output 
     smoothen : Boolean (default, True)
         Boolean variable to use Diffusion based assignment
+
+    other named arguments are passed into following functions:
+        SquareRootSlopeFramework.get_gamma : lam, grid_dim
         
     Returns:
     ========
@@ -180,7 +229,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         for k in range(n_clusters):
             Mk = get_Mk(data, delta_n, k)
             gam_inv = manifold.center(gam_ik[Mk,k,:].T)
-            results_ids = [center_to_template.remote(i, DATA_RAY, eta[k], gam_inv) for i in Mk]
+            results_ids = [center_to_template.remote(i, DATA_RAY, eta[k], gam_inv, **kwargs) for i in Mk]
             results = ray.get(results_ids)
             for r in results:
                 qik_gam[r[0],k,...] = r[3]

@@ -1,5 +1,4 @@
 import numpy as np
-from scipy import linalg
 import optimum_reparamN2 as orN2
 from scipy.interpolate import UnivariateSpline, interp1d
 from scipy.integrate import cumtrapz
@@ -204,7 +203,7 @@ class WarpingManifold:
         if gam.ndim > 1:
             T, n = gam.shape
         else:
-            return gamma_inverse(gam)
+            return self.inverse(gam)
 
         psi = np.zeros_like(gam)
         for k in range(0, n):
