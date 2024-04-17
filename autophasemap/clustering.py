@@ -15,10 +15,29 @@ from ortools.graph.python.min_cost_flow import SimpleMinCostFlow
 from .geometry import SquareRootSlopeFramework, WarpingManifold
 from .diffusion import DiffusionMaps
 
+from sklearn.cluster import kmeans_plusplus
 import ray
 
 @ray.remote
 def compute_cluster_distance(i, data, eta):
+    """Compute distances for clustering
+
+    Parameters
+    ----------
+    i : int
+        index of function in the DataSet object.
+    data : autophasemap.utils.BaseDataSet
+        dataset object created using the base class.
+    eta : list
+        Template functions to which distance needs to be computed for.
+
+    Returns
+    -------
+    i : int
+        index of function in the DataSet object.
+    di : np.ndarray
+        distances to each template.
+    """
     SRSF = SquareRootSlopeFramework(data.t)
     ip_address = ray._private.services.get_node_ip_address()
     n_clusters = len(eta)
@@ -224,7 +243,8 @@ def _is_same_clustering(labels1, labels2, n_clusters):
 def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True):
     best_error, best_labels = None, None
     for i in range(n_runs):
-        random_sample = np.random.choice(np.arange(data.N), n_clusters)
+        # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
+        _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
         res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen)
         if best_error is None or (
                 res.error < best_error
