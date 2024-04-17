@@ -19,7 +19,7 @@ from sklearn.cluster import kmeans_plusplus
 import ray
 
 @ray.remote
-def compute_cluster_distance(i, data, eta):
+def compute_cluster_distance(i, data, eta, **kwargs):
     """Compute distances for clustering
 
     Parameters
@@ -47,7 +47,7 @@ def compute_cluster_distance(i, data, eta):
     fi_gam = np.zeros((n_clusters, data.n_domain))
     qi = SRSF.to_srsf(data.F[i])
     for k in range(n_clusters):
-        _gam = SRSF.get_gamma(eta[k], qi)
+        _gam = SRSF.get_gamma(eta[k], qi, **kwargs)
         _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
         _qik_gam = SRSF.to_srsf(_fik_gam)
         di[k] = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
@@ -123,7 +123,10 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     SRSF = SquareRootSlopeFramework(data.t)
     center = SRSF.warp_q_gamma(template, gam_inv)
     qi = SRSF.to_srsf(data.F[i])
-    _gam = SRSF.get_gamma(center, qi, **kwargs)
+    _gam = SRSF.get_gamma(center, 
+                          qi, 
+                          **kwargs
+                          )
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
     
@@ -217,7 +220,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         # step 2a
         eta_ray = ray.put(eta)
 
-        results_ids = [compute_cluster_distance.remote(i, DATA_RAY, eta_ray) for i in range(data.N)]
+        results_ids = [compute_cluster_distance.remote(i, DATA_RAY, eta_ray, **kwargs) for i in range(data.N)]
         results = ray.get(results_ids)
 
         d_amplitude, gam_ik, qik_gam, fik_gam = process_step2a(results, data, n_clusters)
@@ -289,13 +292,13 @@ def _is_same_clustering(labels1, labels2, n_clusters):
         
     return True
 
-def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True):
+def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True, **kwargs):
     best_error, best_labels = None, None
     bic = []
     for i in range(n_runs):
         # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
         _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
-        res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen)
+        res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen, **kwargs)
         bic.append(compute_BIC(data, res.fik_gam, res.qik_gam, res.delta_n))
         if best_error is None or (
                 res.error < best_error
