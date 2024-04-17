@@ -255,8 +255,9 @@ def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen
                 best_labels = res.delta_n
                 best_res = res
                 best_error = res.error
+                best_bic = bic[-1]
         if verbose>1:
-            print("Random init of %d/%d current error : %2.4f"%(i+1, n_runs, best_error) )
+            print("Random init of %d/%d current error : %2.4f and BIC : %2.4f"%(i+1, n_runs, best_error, best_bic) )
 
     return best_res, bic
 
