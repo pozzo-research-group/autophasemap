@@ -9,3 +9,4 @@ PyGSP==0.5.1
 ray==2.11.0
 scikit-learn==1.4.2
 scipy==1.13.0
+warping @git+https://github.com/kiranvad/warping.git
