@@ -6,6 +6,6 @@ numpy==1.26.4
 ortools==9.9.3963
 pandas==2.2.2
 PyGSP==0.5.1
-ray==2.10.0
+ray
 scikit-learn==1.4.2
 scipy==1.13.0
