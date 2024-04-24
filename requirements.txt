@@ -1,3 +1,5 @@
+Cython
+cffi
 warping @ git+https://github.com/kiranvad/warping.git@9d05b34ec50cb1da510f9951ee2b703461f8cdfb
 matplotlib==3.8.4
 msgpack==1.0.8
