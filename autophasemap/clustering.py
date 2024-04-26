@@ -161,7 +161,7 @@ def assign_clusters(data, d_amplitude, smoothen=True):
     else:
         dist = d_amplitude
 
-    labels = labels_constrained(dist, 5, N)
+    labels = labels_constrained(dist, 2, N)
     
     return dist, labels
     
