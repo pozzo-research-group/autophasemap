@@ -1,22 +1,14 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy import linalg
-import pdb
-import optimum_reparamN2 as orN2
-from scipy.interpolate import UnivariateSpline, interp1d
-from scipy.integrate import cumtrapz
 from scipy.stats import multivariate_normal as mvn
 from scipy.linalg import svd
-from pygsp import graphs
-import time, os, traceback, shutil, warnings, sys, datetime
+import time, traceback, warnings, datetime
 from collections import namedtuple
 from ortools.graph.python.min_cost_flow import SimpleMinCostFlow
+from sklearn.cluster import kmeans_plusplus
+import ray
 
 from .geometry import SquareRootSlopeFramework, WarpingManifold
 from .diffusion import DiffusionMaps
-
-from sklearn.cluster import kmeans_plusplus
-import ray
 
 @ray.remote
 def compute_cluster_distance(i, data, eta, **kwargs):
@@ -47,7 +39,7 @@ def compute_cluster_distance(i, data, eta, **kwargs):
     fi_gam = np.zeros((n_clusters, data.n_domain))
     qi = SRSF.to_srsf(data.F[i])
     for k in range(n_clusters):
-        _gam = SRSF.get_gamma(eta[k], qi, **kwargs)
+        _gam = SRSF.get_gamma(eta[k], qi, grid_dim=kwargs.pop("grid_dim", 7))
         _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
         _qik_gam = SRSF.to_srsf(_fik_gam)
         di[k] = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
@@ -125,7 +117,7 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     qi = SRSF.to_srsf(data.F[i])
     _gam = SRSF.get_gamma(center, 
                           qi, 
-                          **kwargs
+                          grid_dim=kwargs.pop("grid_dim", 7)
                           )
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
@@ -147,16 +139,17 @@ def get_Mk(data, delta_n, k):
         
     return Mk
 
-def assign_clusters(data, d_amplitude, smoothen=True):
+def assign_clusters(data, d_amplitude, smoothen=True, **kwargs):
     N, p = d_amplitude.shape
     
     if smoothen:
-        diffmap = DiffusionMaps(data.C)
+        diffmap = DiffusionMaps(data.C, k=kwargs.pop("k", 3))
         
         dist = np.zeros((N, p))
         for i in range(p):
             s = d_amplitude[:,i]
-            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s)
+            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s, 
+                                                                     num_freq=kwargs.pop("num_freq", 30))
             dist[:,i] = s_tilda
     else:
         dist = d_amplitude
@@ -226,7 +219,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         d_amplitude, gam_ik, qik_gam, fik_gam = process_step2a(results, data, n_clusters)
         
         #step 2b
-        dist, delta_n = assign_clusters(data, d_amplitude, smoothen=smoothen)
+        dist, delta_n = assign_clusters(data, d_amplitude, smoothen=smoothen, **kwargs)
 
         #step 2c
         for k in range(n_clusters):
@@ -269,8 +262,9 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         del eta_ray 
     
     end = time.time()
-    time_str =  str(datetime.timedelta(seconds=end-start))   
-    print('Total iterations %d\tError : %2.4f and took %s'%(n, error, time_str))
+    time_str =  str(datetime.timedelta(seconds=end-start))
+    if verbose>1:   
+        print('Total iterations %d\tError : %2.4f and took %s'%(n, error, time_str))
         
     return res(templates, gam_ik, qik_gam, fik_gam, delta_n, dist, d_amplitude, error)
     
@@ -401,6 +395,24 @@ def compute_BIC(data, fik_gam, qik_gam, delta_n):
     
 
 def labels_constrained(D, size_min, size_max):
+    """Generate labels using constrained k-means.
+
+    https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-65.pdf
+
+    Parameters
+    ----------
+    D : np.ndarray
+        Distance matrix of the shape (num_samples, num_clusters)
+    size_min : int
+        Minimum number of points in each k-means cluster
+    size_max : int
+        Maximum number of points in each k-means cluster
+
+    Returns
+    -------
+    np.ndarray
+        Labels of each point grouped into clusters
+    """
     n_X, n_C = D.shape
     edges, costs, capacities, supplies = minimum_cost_flow_problem_graph(D, size_min, size_max)
     labels = solve_min_cost_flow_graph(edges, costs, capacities, supplies, n_C, n_X)

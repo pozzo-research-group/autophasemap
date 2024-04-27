@@ -1,13 +1,5 @@
 import numpy as np
-from scipy import linalg
-import pdb
-import optimum_reparamN2 as orN2
-from scipy.interpolate import UnivariateSpline, interp1d
-from scipy.integrate import cumtrapz
-from collections import namedtuple
 from pygsp import graphs
-import time, os, traceback, shutil, warnings
-
 
 class DiffusionMaps:
 	def __init__(self, domain, k=8):
@@ -26,8 +18,11 @@ class DiffusionMaps:
 
 		"""
 		
-		self.G = graphs.NNGraph(domain, NNtype='knn', k=8, 
-		                   center=False, rescale=False
+		self.G = graphs.NNGraph(domain, 
+						  NNtype='knn', 
+						  k=k, 
+						  center=False, 
+						  rescale=False
 		                  )
 		self.G.compute_fourier_basis()
     
