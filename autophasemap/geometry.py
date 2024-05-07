@@ -18,6 +18,10 @@ class SquareRootSlopeFramework:
         warp_f_gamma : Apply warping to a function
         warp_q_gamma : Apply warping to SRSF of a function
         get_gamma : Compute warping function given two SRSF
+
+    This construction uses splines routines (UnivariateSpline and Akima1DInterpolator) from scipy
+    but does not perform any smoothing.
+    This is used purely for reliable computation of derivatives and inverses where needed.
     """
     def __init__(self, time):
         self.time = time 
@@ -35,8 +39,8 @@ class SquareRootSlopeFramework:
             q : numpy array of shape (n_domain, )
                 Discrete SRSF evaluation of a function            
         """
-        spl = interp.Akima1DInterpolator(self.time, f)
-        grad = spl.derivative(nu=1)(self.time)
+        spl = interp.UnivariateSpline(self.time, f, s=0)
+        grad = spl.derivative(n=1)(self.time)
         q = grad / np.sqrt(np.fabs(grad) + 1e-3)
 
         return q
@@ -76,7 +80,7 @@ class SquareRootSlopeFramework:
             f_gamma : numpy array of shape (n_domain, )
                 Warped function 'f' with 'gam'         
         """ 
-        spl = interp.Akima1DInterpolator(self.time, f)
+        spl = interp.UnivariateSpline(self.time, f, s=0)
         f_gamma = spl(gam)
 
         return f_gamma
@@ -96,9 +100,9 @@ class SquareRootSlopeFramework:
             q_hat : numpy array of shape (n_domain, )
                 Warped function 'q' with 'gam'         
         """ 
-        spl_gam = interp.Akima1DInterpolator(self.time, gam)
+        spl_gam = interp.PchipInterpolator(self.time, gam)
         gam_dev = spl_gam.derivative(nu=1)(self.time)
-        spl_q = interp.Akima1DInterpolator(self.time, q)
+        spl_q = interp.UnivariateSpline(self.time, q, s=0)
         q_gamma = spl_q(gam)
 
         q_hat = q_gamma * np.sqrt(gam_dev)
@@ -192,8 +196,9 @@ class WarpingManifold:
 
 
     def inverse(self, gam):
-        # we compute inverse by inverting x and y values of function gamma(t) 
-        spl = interp.Akima1DInterpolator(gam, self.time)
+        # we compute inverse by inverting x and y values of function gamma(t)
+        # in the spline representaion 
+        spl = interp.PchipInterpolator(gam, self.time)
         gamI = spl(self.time)
         gamI = (gamI - gamI[0]) / (gamI[-1] - gamI[0])
         
@@ -207,7 +212,7 @@ class WarpingManifold:
 
         psi = np.zeros_like(gam)
         for k in range(0, n):
-            spl = interp.Akima1DInterpolator(self.time, gam[:, k])
+            spl = interp.PchipInterpolator(self.time, gam[:, k])
             psi[:, k] = np.sqrt(spl.derivative(nu=1)(self.time))
 
         # Find Direction
