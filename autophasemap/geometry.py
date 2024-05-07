@@ -1,6 +1,6 @@
 import numpy as np
 import optimum_reparamN2 as orN2
-from scipy.interpolate import UnivariateSpline, interp1d
+import scipy.interpolate as interp
 from scipy.integrate import cumtrapz
 
 class SquareRootSlopeFramework:
@@ -35,8 +35,8 @@ class SquareRootSlopeFramework:
             q : numpy array of shape (n_domain, )
                 Discrete SRSF evaluation of a function            
         """
-        spl = UnivariateSpline(self.time, f, s=0)
-        grad = spl.derivative(n=1)(self.time)
+        spl = interp.Akima1DInterpolator(self.time, f)
+        grad = spl.derivative(nu=1)(self.time)
         q = grad / np.sqrt(np.fabs(grad) + 1e-3)
 
         return q
@@ -73,13 +73,13 @@ class SquareRootSlopeFramework:
                 
         Returns:
         ========
-            f_temp : numpy array of shape (n_domain, )
+            f_gamma : numpy array of shape (n_domain, )
                 Warped function 'f' with 'gam'         
         """ 
-        f_temp = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], 
-            self.time, f)
+        spl = interp.Akima1DInterpolator(self.time, f)
+        f_gamma = spl(gam)
 
-        return f_temp
+        return f_gamma
         
     def warp_q_gamma(self, q, gam):
         """Warp a function q with a gamma function
@@ -93,16 +93,17 @@ class SquareRootSlopeFramework:
                 
         Returns:
         ========
-            q_temp : numpy array of shape (n_domain, )
+            q_hat : numpy array of shape (n_domain, )
                 Warped function 'q' with 'gam'         
         """ 
-        gam_dev = np.gradient(gam, self.time)
-        tmp = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], 
-            self.time, q)
+        spl_gam = interp.Akima1DInterpolator(self.time, gam)
+        gam_dev = spl_gam.derivative(nu=1)(self.time)
+        spl_q = interp.Akima1DInterpolator(self.time, q)
+        q_gamma = spl_q(gam)
 
-        q_temp = tmp * np.sqrt(gam_dev)
+        q_hat = q_gamma * np.sqrt(gam_dev)
 
-        return q_temp
+        return q_hat
         
     def get_gamma(self, q1, q2, lam=0.0, grid_dim=20):
         """Compute warping function given two SRSFs
@@ -191,10 +192,9 @@ class WarpingManifold:
 
 
     def inverse(self, gam):
-        N = gam.size
-        x = np.linspace(0,1,N)
-        s = interp1d(gam, x)
-        gamI = s(x)
+        # we compute inverse by inverting x and y values of function gamma(t) 
+        spl = interp.Akima1DInterpolator(gam, self.time)
+        gamI = spl(self.time)
         gamI = (gamI - gamI[0]) / (gamI[-1] - gamI[0])
         
         return gamI
@@ -207,7 +207,8 @@ class WarpingManifold:
 
         psi = np.zeros_like(gam)
         for k in range(0, n):
-            psi[:, k] = np.sqrt(np.gradient(gam[:, k], self.time))
+            spl = interp.Akima1DInterpolator(self.time, gam[:, k])
+            psi[:, k] = np.sqrt(spl.derivative(nu=1)(self.time))
 
         # Find Direction
         mnpsi = psi.mean(axis=1)
