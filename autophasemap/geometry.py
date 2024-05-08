@@ -136,6 +136,7 @@ class SquareRootSlopeFramework:
                                       lam, 
                                       grid_dim
                                      )
+        gamma = (self.time[-1] - self.time[0]) * gamma + self.time[0]
         
         return gamma
 
