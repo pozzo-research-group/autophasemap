@@ -100,8 +100,8 @@ class SquareRootSlopeFramework:
             q_hat : numpy array of shape (n_domain, )
                 Warped function 'q' with 'gam'         
         """ 
-        spl_gam = interp.PchipInterpolator(self.time, gam)
-        gam_dev = spl_gam.derivative(nu=1)(self.time)
+        spl_gam = interp.UnivariateSpline(self.time, gam)
+        gam_dev = spl_gam.derivative(n=1)(self.time)
         spl_q = interp.UnivariateSpline(self.time, q, s=0)
         q_gamma = spl_q(gam)
 
@@ -137,7 +137,7 @@ class SquareRootSlopeFramework:
                                       grid_dim
                                      )
         gamma = (self.time[-1] - self.time[0]) * gamma + self.time[0]
-        
+
         return gamma
 
 class WarpingManifold:
@@ -199,7 +199,7 @@ class WarpingManifold:
     def inverse(self, gam):
         # we compute inverse by inverting x and y values of function gamma(t)
         # in the spline representaion 
-        spl = interp.PchipInterpolator(gam, self.time)
+        spl = interp.UnivariateSpline(gam, self.time, s=0)
         gamI = spl(self.time)
         gamI = (gamI - gamI[0]) / (gamI[-1] - gamI[0])
         
