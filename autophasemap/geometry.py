@@ -214,7 +214,8 @@ class WarpingManifold:
         psi = np.zeros_like(gam)
         for k in range(0, n):
             spl = interp.UnivariateSpline(self.time, gam[:, k])
-            psi[:, k] = np.fabs(np.sqrt(spl.derivative(n=1)(self.time)))
+            grad = spl.derivative(n=1)(self.time)
+            psi[:, k] = np.sqrt(np.fabs(grad))
 
         # Find Direction
         mnpsi = psi.mean(axis=1)
