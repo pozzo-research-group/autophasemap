@@ -105,7 +105,7 @@ class SquareRootSlopeFramework:
         spl_q = interp.UnivariateSpline(self.time, q, s=0)
         q_gamma = spl_q(gam)
 
-        q_hat = q_gamma * np.sqrt(gam_dev)
+        q_hat = q_gamma * np.sqrt(np.fabs(gam_dev))
 
         return q_hat
         
@@ -214,7 +214,7 @@ class WarpingManifold:
         psi = np.zeros_like(gam)
         for k in range(0, n):
             spl = interp.UnivariateSpline(self.time, gam[:, k])
-            psi[:, k] = np.sqrt(spl.derivative(n=1)(self.time))
+            psi[:, k] = np.fabs(np.sqrt(spl.derivative(n=1)(self.time)))
 
         # Find Direction
         mnpsi = psi.mean(axis=1)
