@@ -108,7 +108,7 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     _gam : np.ndarray (n_domain, )
         Gamma function centered
     _qik_gam : np.ndarray (n_domain, )
-        centered SRSF of the sample function  
+        Centered SRSF of the sample function  
     _fik_gam : np.ndarray (n_domain, )
         Centered function 
     """

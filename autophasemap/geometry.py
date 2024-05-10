@@ -155,22 +155,66 @@ class WarpingManifold:
         log : Apply logarthim function of warping manifold
         exp : Apply exponential function of warping manifold
         inverse : Compute inverse of a warping function
-        center : Compute center of a set of warping functions        
+        center : Compute center of a set of warping functions    
+   
     """
     def __init__(self, time):
         self.time = time
     
-    def inner_product(self, tangent_vec_a, tangent_vec_b, base_point=None):
+    def inner_product(self, tangent_vec_a, tangent_vec_b):
+        """Inner product between two tangent vectors
+
+        Parameters
+        ----------
+        tangent_vec_a : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+        tangent_vec_b : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+
+        Returns
+        -------
+        float
+            Inner product between the two tangent vectors
+        """
         ip = np.trapz(tangent_vec_a*tangent_vec_b, self.time)
     
         return ip
 
-    def norm(self, tangent_vec, base_point=None):
+    def norm(self, tangent_vec):
+        """Norm of a tangent vector
+
+        Parameters
+        ----------
+        tangent_vec : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+
+        Returns
+        -------
+        float
+            Norm of tangent vector
+        """
         l2norm = np.sqrt(self.inner_product(tangent_vec, tangent_vec))
 
         return l2norm
     
     def log(self, base_point, point):
+        """Logarithmic map of warping manifold
+
+        Parameters
+        ----------
+        point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+        base_point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+
+        Returns
+        -------
+        tuple of (np.ndarray of shape (n_samples, ), float)
+            exp_inv : np.ndarray of shape (n_samples, )
+                Vector direction to reach the point from base_point
+            theta : float
+                angle of the shooting vector
+        """
         tmp = self.inner_product(base_point, point)
         if tmp > 1:
             tmp = 1
@@ -187,6 +231,20 @@ class WarpingManifold:
         return exp_inv, theta
     
     def exp(self, point, base_point):
+        """Exponential mapping of warping manifold
+
+        Parameters
+        ----------
+        point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+        base_point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            Point on the manifold after traveling in the tangential direction
+        """
         norm = self.norm(base_point)
         if norm.sum() == 0:
             expgam = np.cos(norm) * point
@@ -197,6 +255,18 @@ class WarpingManifold:
 
 
     def inverse(self, gam):
+        """Find inverse of a warping function
+
+        Parameters
+        ----------
+        gam : np.ndarray of shape (n_samples, )
+            Warping function
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            Inverse of the given warping function
+        """
         # we compute inverse by inverting x and y values of function gamma(t)
         # in the spline representaion 
         spl = interp.UnivariateSpline(gam, self.time, s=0)
@@ -206,6 +276,22 @@ class WarpingManifold:
         return gamI
 
     def center(self, gam):
+        """Implement mean centering of set of warping functions
+
+        Parameters
+        ----------
+        gam : np.ndarray of shape (n_functions, n_samples)
+            Warping functions that needs to be mean centered
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            inverse of the mean function of given warping functions
+
+        This function implements the Algortim 1 from the paper:
+        Srivastava, Anuj, et al. "Registration of functional data using Fisher-Rao metric." 
+        arXiv preprint arXiv:1103.3817 (2011).         
+        """
         if gam.ndim > 1:
             T, n = gam.shape
         else:

@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-color_blindf = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", 
-"#a96b59", "#e76300", "#b9ac70", "#92dadd"]
+# from https://scottplot.net/cookbook/4.1/colors/#category-20
+color_blindf = ["#1F77B4", "#AEC7E8", "#FF7F0E", "#FFBB78", "#2CA02C", "#98DF8A", "#D62728", "#FF9896", "#9467BD", "#C5B0D5",
+"#8C564B",  "#C49C94", "#E377C2", "#F7B6D2", "#7F7F7F", "#C7C7C7", "#BCBD22", "#DBDB8D", "#17BECF", "#9EDAE5"]
 bkg_spectra_color = "#717581"
 
 def plot_clusters(axs, data, out, mode="aligned"):
@@ -38,7 +39,7 @@ def plot_clusters(axs, data, out, mode="aligned"):
 			axs[k].loglog(data.q, spectra, color='grey')            
 		axs[k].loglog(data.q, out.templates[k], 
 			color=color_blindf[k], 
-			lw=3.0)
+			lw=1.0)
 		axs[k].set_ylim([np.asarray(data.F).min(), np.asarray(data.F).max()])
 		axs[k].set_xlabel(r'$q$')
 		axs[k].set_ylabel(r'$I_{q}$')
