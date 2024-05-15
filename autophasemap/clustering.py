@@ -288,13 +288,14 @@ def _is_same_clustering(labels1, labels2, n_clusters):
         
     return True
 
-def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen=True, **kwargs):
+def multi_kmeans_run(n_runs, data, n_clusters, **kwargs):
     best_error, best_labels = None, None
     bic = []
     for i in range(n_runs):
         # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
         _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
-        res = compute_elastic_kmeans(data, random_sample, max_iter, verbose, smoothen, **kwargs)
+        res = compute_elastic_kmeans(data, random_sample, **kwargs)
+        verbose = kwargs.get("verbose", 3)
         bic.append(compute_BIC(data, res.fik_gam, res.qik_gam, res.delta_n))
         if best_error is None or (
                 res.error < best_error
@@ -307,7 +308,7 @@ def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen
         if verbose>1:
             print("Random init of %d/%d current error : %2.4f and BIC : %2.4f"%(i+1, n_runs, best_error, best_bic) )
 
-        if best_error<1e-3:
+        if best_error<kwargs.get("threshold", 1e-2):
             if verbose>1:
                 print('Error threshold reached...')
             break        
