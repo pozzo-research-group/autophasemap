@@ -158,7 +158,7 @@ def assign_clusters(data, d_amplitude, smoothen=True, **kwargs):
     
     return dist, labels
     
-def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, **kwargs):
+def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, threshold=1e-2, **kwargs):
     """Compute elastic kmeans 
     
     This function computes a elastic k-means based approximation of the template functions.
@@ -175,6 +175,8 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         Flag to print output 
     smoothen : Boolean (default, True)
         Boolean variable to use Diffusion based assignment
+    threshold : float (default, 1e-2)
+        Error threshold for early termination    
 
     other named arguments are passed into following functions:
         SquareRootSlopeFramework.get_gamma : lam, grid_dim
@@ -248,7 +250,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         eta = eta_new
         error = error/n_clusters
         
-        if error<1e-3:
+        if error<threshold:
             if verbose>1:
                 print('Error threshold reached...')
             break
