@@ -80,8 +80,7 @@ class SquareRootSlopeFramework:
             f_gamma : numpy array of shape (n_domain, )
                 Warped function 'f' with 'gam'         
         """ 
-        spl = interp.UnivariateSpline(self.time, f, s=0)
-        f_gamma = spl(gam)
+        f_gamma = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], self.time, f)
 
         return f_gamma
         
@@ -100,10 +99,8 @@ class SquareRootSlopeFramework:
             q_hat : numpy array of shape (n_domain, )
                 Warped function 'q' with 'gam'         
         """ 
-        spl_gam = interp.UnivariateSpline(self.time, gam)
-        gam_dev = spl_gam.derivative(n=1)(self.time)
-        spl_q = interp.UnivariateSpline(self.time, q, s=0)
-        q_gamma = spl_q(gam)
+        gam_dev = np.gradient(gam, self.time)
+        q_gamma = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], self.time, q)
 
         q_hat = q_gamma * np.sqrt(np.fabs(gam_dev))
 
@@ -269,8 +266,7 @@ class WarpingManifold:
         """
         # we compute inverse by inverting x and y values of function gamma(t)
         # in the spline representaion 
-        spl = interp.UnivariateSpline(gam, self.time, s=0)
-        gamI = spl(self.time)
+        gamI = np.interp(self.time, gam, self.time)
         gamI = (gamI - gamI[0]) / (gamI[-1] - gamI[0])
         
         return gamI
@@ -299,8 +295,7 @@ class WarpingManifold:
 
         psi = np.zeros_like(gam)
         for k in range(0, n):
-            spl = interp.UnivariateSpline(self.time, gam[:, k])
-            grad = spl.derivative(n=1)(self.time)
+            grad = np.gradient(gam[:, k], self.time)
             psi[:, k] = np.sqrt(np.fabs(grad))
 
         # Find Direction

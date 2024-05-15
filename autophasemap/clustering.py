@@ -305,6 +305,11 @@ def multi_kmeans_run(n_runs, data, n_clusters, max_iter=100, verbose=1, smoothen
         if verbose>1:
             print("Random init of %d/%d current error : %2.4f and BIC : %2.4f"%(i+1, n_runs, best_error, best_bic) )
 
+        if best_error<1e-3:
+            if verbose>1:
+                print('Error threshold reached...')
+            break        
+
     return best_res, bic
 
 def amplitude_fpca(time, Q, F, n_components):
