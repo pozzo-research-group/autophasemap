@@ -7,7 +7,7 @@ color_blindf = ["#1F77B4", "#AEC7E8", "#FF7F0E", "#FFBB78", "#2CA02C", "#98DF8A"
 "#8C564B",  "#C49C94", "#E377C2", "#F7B6D2", "#7F7F7F", "#C7C7C7", "#BCBD22", "#DBDB8D", "#17BECF", "#9EDAE5"]
 bkg_spectra_color = "#717581"
 
-def plot_clusters(axs, data, out, mode="aligned"):
+def plot_clusters(axs, data, out, mode="aligned", data_type="saxs"):
 	""" Plot phase map and corresponding spectra.
 	
 	Parameters:
@@ -36,14 +36,21 @@ def plot_clusters(axs, data, out, mode="aligned"):
 				spectra = data.F[cs]
 			elif mode=="expt":
 				spectra = data.Iq[cs,:]
-			axs[k].loglog(data.q, spectra, color='grey')            
-		axs[k].loglog(data.q, out.templates[k], 
+			axs[k].plot(data.q, spectra, color='grey')            
+		axs[k].plot(data.q, out.templates[k], 
 			color=color_blindf[k], 
 			lw=1.0)
 		axs[k].set_ylim([np.asarray(data.F).min(), np.asarray(data.F).max()])
-		axs[k].set_xlabel(r'$q$')
-		axs[k].set_ylabel(r'$I_{q}$')
 
+		if data_type=="saxs":
+			axs[k].set_xlabel(r'$q$')
+			axs[k].set_ylabel(r'$I_{q}$')
+			axs[k].set_xscale("log")
+			axs[k].set_yscale("log")
+		else:
+			axs[k].set_xlabel(r'$\lambda$')
+			axs[k].set_ylabel(r'$I$')
+		
 		axins = axs[k].inset_axes([0.7, 0.7, 0.4, 0.4])
 		axins.patch.set_alpha(0.1)
 		axins.scatter(data.C[out.delta_n==k,0], 
