@@ -40,9 +40,15 @@ def compute_cluster_distance(i, data, eta, **kwargs):
     qi = SRSF.to_srsf(data.F[i])
     for k in range(n_clusters):
         _gam = SRSF.get_gamma(eta[k], qi, grid_dim=kwargs.pop("grid_dim", 7))
+
         _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
         _qik_gam = SRSF.to_srsf(_fik_gam)
-        di[k] = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
+        amplitude = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
+        gam_dev = np.gradient(_gam, data.t)
+        theta = np.trapz(np.sqrt(gam_dev), x=data.t)
+        phase = np.arccos(np.clip(theta, -1, 1))  
+
+        di[k] = amplitude+phase
         
         gam_i[k,...] = _gam
         qi_gam[k,...] = _qik_gam
@@ -116,9 +122,9 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     center = SRSF.warp_q_gamma(template, gam_inv)
     qi = SRSF.to_srsf(data.F[i])
     _gam = SRSF.get_gamma(center, 
-                          qi, 
-                          grid_dim=kwargs.pop("grid_dim", 7)
-                          )
+                        qi, 
+                        grid_dim=kwargs.pop("grid_dim", 7)
+                        )
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
     
