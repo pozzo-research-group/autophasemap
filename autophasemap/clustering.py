@@ -48,7 +48,7 @@ def compute_cluster_distance(i, data, eta, **kwargs):
         theta = np.trapz(np.sqrt(gam_dev), x=data.t)
         phase = np.arccos(np.clip(theta, -1, 1))  
 
-        di[k] = amplitude+phase
+        di[k] = amplitude
         
         gam_i[k,...] = _gam
         qi_gam[k,...] = _qik_gam
