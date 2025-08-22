@@ -8,7 +8,14 @@ from .clustering import assign_clusters
 import numpy as np 
 
 class BaseDataSet(abc.ABC):
+    """Base class for dataset object
+    """
     def __init__(self, n_domain):
+        """.
+
+        Args:
+            n_domain (int): number of samples for each discretized function
+        """
         self.n_domain = n_domain 
 
     @abc.abstractmethod

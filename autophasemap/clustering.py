@@ -1,24 +1,35 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy import linalg
-import pdb
-import optimum_reparamN2 as orN2
-from scipy.interpolate import UnivariateSpline, interp1d
-from scipy.integrate import cumtrapz
 from scipy.stats import multivariate_normal as mvn
 from scipy.linalg import svd
-from pygsp import graphs
-import time, os, traceback, shutil, warnings, sys, datetime
+import time, traceback, warnings, datetime
 from collections import namedtuple
 from ortools.graph.python.min_cost_flow import SimpleMinCostFlow
+from sklearn.cluster import kmeans_plusplus
+import ray
 
 from .geometry import SquareRootSlopeFramework, WarpingManifold
 from .diffusion import DiffusionMaps
 
-import ray
-
 @ray.remote
-def compute_cluster_distance(i, data, eta):
+def compute_cluster_distance(i, data, eta, **kwargs):
+    """Compute distances for clustering
+
+    Parameters
+    ----------
+    i : int
+        index of function in the DataSet object.
+    data : autophasemap.utils.BaseDataSet
+        dataset object created using the base class.
+    eta : list
+        Template functions to which distance needs to be computed for.
+
+    Returns
+    -------
+    i : int
+        index of function in the DataSet object.
+    di : np.ndarray
+        distances to each template.
+    """
     SRSF = SquareRootSlopeFramework(data.t)
     ip_address = ray._private.services.get_node_ip_address()
     n_clusters = len(eta)
@@ -28,10 +39,16 @@ def compute_cluster_distance(i, data, eta):
     fi_gam = np.zeros((n_clusters, data.n_domain))
     qi = SRSF.to_srsf(data.F[i])
     for k in range(n_clusters):
-        _gam = SRSF.get_gamma(eta[k], qi)
+        _gam = SRSF.get_gamma(eta[k], qi, grid_dim=kwargs.pop("grid_dim", 7))
+
         _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
         _qik_gam = SRSF.to_srsf(_fik_gam)
-        di[k] = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
+        amplitude = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
+        gam_dev = np.gradient(_gam, data.t)
+        theta = np.trapz(np.sqrt(gam_dev), x=data.t)
+        phase = np.arccos(np.clip(theta, -1, 1))  
+
+        di[k] = amplitude
         
         gam_i[k,...] = _gam
         qi_gam[k,...] = _qik_gam
@@ -40,6 +57,28 @@ def compute_cluster_distance(i, data, eta):
     return i, di, gam_i, qi_gam, fi_gam
 
 def process_step2a(results, data, n_clusters):
+    """Process results from ray cluster
+
+    Parameters
+    ----------
+    results : list
+        Output from parallel run
+    data : BaseDataSet
+        Dataset object of autophasemap
+    n_clusters : int
+        Number of clusters requested
+
+    Returns
+    -------
+    d_amplitude : np.ndarray (num_samples, n_clusters)
+        Amplitude distance of each sample to each template
+    gam_ik : np.ndarray (num_samples, n_clusters, n_domain)
+        Gamma function of each sample to each template
+    qik_gam : np.ndarray (num_samples, n_clusters, n_domain)
+        SRSF of each sample to each template gamma  
+    fik_gam : np.ndarray (num_samples, n_clusters, n_domain)
+        Warped function of original curve for each templated  
+    """
     d_amplitude = np.zeros((data.N, n_clusters))
     gam_ik = np.zeros((data.N,n_clusters, data.n_domain))
     qik_gam = np.zeros((data.N,n_clusters, data.n_domain))
@@ -54,11 +93,38 @@ def process_step2a(results, data, n_clusters):
     return d_amplitude, gam_ik, qik_gam, fik_gam
 
 @ray.remote
-def center_to_template(i, data, template, gam_inv):
+def center_to_template(i, data, template, gam_inv, **kwargs):
+    """Perform template centering for each warping function.
+
+    Parameters
+    ----------
+    i : int
+        Index of the samples in data
+    data : BaseDataSet
+        autophasemap base data set object
+    template : np.ndarray (n_domain, )
+        Teamplate function to which the centering needs to be performed
+    gam_inv : np.ndarray
+        inverse of the warping function
+
+    Returns
+    -------
+    i : int 
+        Index to data in BaseDataSet object
+    _gam : np.ndarray (n_domain, )
+        Gamma function centered
+    _qik_gam : np.ndarray (n_domain, )
+        Centered SRSF of the sample function  
+    _fik_gam : np.ndarray (n_domain, )
+        Centered function 
+    """
     SRSF = SquareRootSlopeFramework(data.t)
     center = SRSF.warp_q_gamma(template, gam_inv)
     qi = SRSF.to_srsf(data.F[i])
-    _gam = SRSF.get_gamma(center, qi)
+    _gam = SRSF.get_gamma(center, 
+                        qi, 
+                        grid_dim=kwargs.pop("grid_dim", 7)
+                        )
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
     
@@ -79,25 +145,26 @@ def get_Mk(data, delta_n, k):
         
     return Mk
 
-def assign_clusters(data, d_amplitude, smoothen=True):
+def assign_clusters(data, d_amplitude, smoothen=True, **kwargs):
     N, p = d_amplitude.shape
     
     if smoothen:
-        diffmap = DiffusionMaps(data.C)
+        diffmap = DiffusionMaps(data.C, k=kwargs.pop("k", 3))
         
         dist = np.zeros((N, p))
         for i in range(p):
             s = d_amplitude[:,i]
-            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s)
+            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s, 
+                                                                     num_freq=kwargs.pop("num_freq", 30))
             dist[:,i] = s_tilda
     else:
         dist = d_amplitude
 
-    labels = labels_constrained(dist, 5, N)
+    labels = labels_constrained(dist, 2, N)
     
     return dist, labels
     
-def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=True):
+def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, threshold=1e-2, **kwargs):
     """Compute elastic kmeans 
     
     This function computes a elastic k-means based approximation of the template functions.
@@ -106,14 +173,19 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
     ===========
     data : Data class object 
         (see examples)
-    n_clusters : int
-        Number of template functions
+    random_sample : list
+        List of random samples drawn from the data set
     max_iter : int, default 100
         Maximum number of iterations to perform
     verbose : int, [1,2,3]
         Flag to print output 
     smoothen : Boolean (default, True)
         Boolean variable to use Diffusion based assignment
+    threshold : float (default, 1e-2)
+        Error threshold for early termination    
+
+    other named arguments are passed into following functions:
+        SquareRootSlopeFramework.get_gamma : lam, grid_dim
         
     Returns:
     ========
@@ -142,26 +214,26 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
     res = namedtuple("res", "templates gam_ik qik_gam fik_gam delta_n dist d_amplitude error")
     start = time.time()
     Q = [SRSF.to_srsf(fi) for fi in data.F]
-    random_sample = np.random.choice(np.arange(data.N), n_clusters)
+    n_clusters = random_sample.shape[0]
     eta = [Q[r] for r in random_sample]
 
     for n in range(max_iter):
         # step 2a
         eta_ray = ray.put(eta)
 
-        results_ids = [compute_cluster_distance.remote(i, DATA_RAY, eta_ray) for i in range(data.N)]
+        results_ids = [compute_cluster_distance.remote(i, DATA_RAY, eta_ray, **kwargs) for i in range(data.N)]
         results = ray.get(results_ids)
 
         d_amplitude, gam_ik, qik_gam, fik_gam = process_step2a(results, data, n_clusters)
         
         #step 2b
-        dist, delta_n = assign_clusters(data, d_amplitude, smoothen=smoothen)
+        dist, delta_n = assign_clusters(data, d_amplitude, smoothen=smoothen, **kwargs)
 
         #step 2c
         for k in range(n_clusters):
             Mk = get_Mk(data, delta_n, k)
             gam_inv = manifold.center(gam_ik[Mk,k,:].T)
-            results_ids = [center_to_template.remote(i, DATA_RAY, eta[k], gam_inv) for i in Mk]
+            results_ids = [center_to_template.remote(i, DATA_RAY, eta[k], gam_inv, **kwargs) for i in Mk]
             results = ray.get(results_ids)
             for r in results:
                 qik_gam[r[0],k,...] = r[3]
@@ -184,7 +256,7 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
         eta = eta_new
         error = error/n_clusters
         
-        if error<1e-3:
+        if error<threshold:
             if verbose>1:
                 print('Error threshold reached...')
             break
@@ -198,12 +270,57 @@ def compute_elastic_kmeans(data, n_clusters, max_iter=100, verbose=1, smoothen=T
         del eta_ray 
     
     end = time.time()
-    time_str =  str(datetime.timedelta(seconds=end-start))   
-    print('Total iterations %d\tError : %2.4f and took %s'%(n, error, time_str))
+    time_str =  str(datetime.timedelta(seconds=end-start))
+    if verbose>1:   
+        print('Total iterations %d\tError : %2.4f and took %s'%(n, error, time_str))
         
     return res(templates, gam_ik, qik_gam, fik_gam, delta_n, dist, d_amplitude, error)
     
+
+def _is_same_clustering(labels1, labels2, n_clusters):
+    """Check if two arrays of labels are the same up to a permutation of the labels
+
+    From : sklearn/cluster/_k_means_common.pyx#L317
     
+    """
+
+    mapping = np.full(fill_value=-1, shape=(n_clusters,), dtype=np.int32)
+
+    for i in range(labels1.shape[0]):
+        if mapping[labels1[i]] == -1:
+            mapping[labels1[i]] = labels2[i]
+        elif mapping[labels1[i]] != labels2[i]:
+            return False
+        
+    return True
+
+def multi_kmeans_run(n_runs, data, n_clusters, **kwargs):
+    best_error, best_labels = None, None
+    bic = []
+    for i in range(n_runs):
+        # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
+        _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
+        res = compute_elastic_kmeans(data, random_sample, **kwargs)
+        verbose = kwargs.get("verbose", 3)
+        bic.append(compute_BIC(data, res.fik_gam, res.qik_gam, res.delta_n))
+        if best_error is None or (
+                res.error < best_error
+                and not _is_same_clustering(res.delta_n, best_labels, n_clusters)
+            ):
+                best_labels = res.delta_n
+                best_res = res
+                best_error = res.error
+                best_bic = bic[-1]
+        if verbose>1:
+            print("Random init of %d/%d current error : %2.4f and BIC : %2.4f"%(i+1, n_runs, best_error, best_bic) )
+
+        if best_error<kwargs.get("threshold", 1e-2):
+            if verbose>1:
+                print('Error threshold reached...')
+            break        
+
+    return best_res, bic
+
 def amplitude_fpca(time, Q, F, n_components):
     
     mididx = int(np.round(time.shape[0] / 2))
@@ -292,6 +409,24 @@ def compute_BIC(data, fik_gam, qik_gam, delta_n):
     
 
 def labels_constrained(D, size_min, size_max):
+    """Generate labels using constrained k-means.
+
+    https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-65.pdf
+
+    Parameters
+    ----------
+    D : np.ndarray
+        Distance matrix of the shape (num_samples, num_clusters)
+    size_min : int
+        Minimum number of points in each k-means cluster
+    size_max : int
+        Maximum number of points in each k-means cluster
+
+    Returns
+    -------
+    np.ndarray
+        Labels of each point grouped into clusters
+    """
     n_X, n_C = D.shape
     edges, costs, capacities, supplies = minimum_cost_flow_problem_graph(D, size_min, size_max)
     labels = solve_min_cost_flow_graph(edges, costs, capacities, supplies, n_C, n_X)

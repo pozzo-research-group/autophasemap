@@ -1,11 +1,7 @@
 import numpy as np
-from scipy import linalg
-import pdb
 import optimum_reparamN2 as orN2
-from scipy.interpolate import UnivariateSpline, interp1d
+import scipy.interpolate as interp
 from scipy.integrate import cumtrapz
-from collections import namedtuple
-import time, os, traceback, shutil, warnings
 
 class SquareRootSlopeFramework:
     """Square Root Slope Framework (SRSF)
@@ -22,6 +18,10 @@ class SquareRootSlopeFramework:
         warp_f_gamma : Apply warping to a function
         warp_q_gamma : Apply warping to SRSF of a function
         get_gamma : Compute warping function given two SRSF
+
+    This construction uses splines routines (UnivariateSpline and Akima1DInterpolator) from scipy
+    but does not perform any smoothing.
+    This is used purely for reliable computation of derivatives and inverses where needed.
     """
     def __init__(self, time):
         self.time = time 
@@ -39,7 +39,7 @@ class SquareRootSlopeFramework:
             q : numpy array of shape (n_domain, )
                 Discrete SRSF evaluation of a function            
         """
-        spl = UnivariateSpline(self.time, f, s=0)
+        spl = interp.UnivariateSpline(self.time, f, s=0)
         grad = spl.derivative(n=1)(self.time)
         q = grad / np.sqrt(np.fabs(grad) + 1e-3)
 
@@ -77,13 +77,12 @@ class SquareRootSlopeFramework:
                 
         Returns:
         ========
-            f_temp : numpy array of shape (n_domain, )
+            f_gamma : numpy array of shape (n_domain, )
                 Warped function 'f' with 'gam'         
         """ 
-        f_temp = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], 
-            self.time, f)
+        f_gamma = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], self.time, f)
 
-        return f_temp
+        return f_gamma
         
     def warp_q_gamma(self, q, gam):
         """Warp a function q with a gamma function
@@ -97,18 +96,17 @@ class SquareRootSlopeFramework:
                 
         Returns:
         ========
-            q_temp : numpy array of shape (n_domain, )
+            q_hat : numpy array of shape (n_domain, )
                 Warped function 'q' with 'gam'         
         """ 
         gam_dev = np.gradient(gam, self.time)
-        tmp = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], 
-            self.time, q)
+        q_gamma = np.interp((self.time[-1] - self.time[0]) * gam + self.time[0], self.time, q)
 
-        q_temp = tmp * np.sqrt(gam_dev)
+        q_hat = q_gamma * np.sqrt(np.fabs(gam_dev))
 
-        return q_temp
+        return q_hat
         
-    def get_gamma(self, q1, q2, lam=0.0, grid_dim=7):
+    def get_gamma(self, q1, q2, lam=0.0, grid_dim=20):
         """Compute warping function given two SRSFs
         
         Parameters:
@@ -135,7 +133,8 @@ class SquareRootSlopeFramework:
                                       lam, 
                                       grid_dim
                                      )
-        
+        gamma = (self.time[-1] - self.time[0]) * gamma + self.time[0]
+
         return gamma
 
 class WarpingManifold:
@@ -153,22 +152,66 @@ class WarpingManifold:
         log : Apply logarthim function of warping manifold
         exp : Apply exponential function of warping manifold
         inverse : Compute inverse of a warping function
-        center : Compute center of a set of warping functions        
+        center : Compute center of a set of warping functions    
+   
     """
     def __init__(self, time):
         self.time = time
     
-    def inner_product(self, tangent_vec_a, tangent_vec_b, base_point=None):
+    def inner_product(self, tangent_vec_a, tangent_vec_b):
+        """Inner product between two tangent vectors
+
+        Parameters
+        ----------
+        tangent_vec_a : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+        tangent_vec_b : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+
+        Returns
+        -------
+        float
+            Inner product between the two tangent vectors
+        """
         ip = np.trapz(tangent_vec_a*tangent_vec_b, self.time)
     
         return ip
 
-    def norm(self, tangent_vec, base_point=None):
+    def norm(self, tangent_vec):
+        """Norm of a tangent vector
+
+        Parameters
+        ----------
+        tangent_vec : np.ndarray of shape (n_samples, )
+            A Tangent vector in the manifold tangent space
+
+        Returns
+        -------
+        float
+            Norm of tangent vector
+        """
         l2norm = np.sqrt(self.inner_product(tangent_vec, tangent_vec))
 
         return l2norm
     
     def log(self, base_point, point):
+        """Logarithmic map of warping manifold
+
+        Parameters
+        ----------
+        point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+        base_point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+
+        Returns
+        -------
+        tuple of (np.ndarray of shape (n_samples, ), float)
+            exp_inv : np.ndarray of shape (n_samples, )
+                Vector direction to reach the point from base_point
+            theta : float
+                angle of the shooting vector
+        """
         tmp = self.inner_product(base_point, point)
         if tmp > 1:
             tmp = 1
@@ -185,6 +228,20 @@ class WarpingManifold:
         return exp_inv, theta
     
     def exp(self, point, base_point):
+        """Exponential mapping of warping manifold
+
+        Parameters
+        ----------
+        point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+        base_point : np.ndarray of shape (n_samples, )
+            Point on the warping manifold
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            Point on the manifold after traveling in the tangential direction
+        """
         norm = self.norm(base_point)
         if norm.sum() == 0:
             expgam = np.cos(norm) * point
@@ -195,23 +252,51 @@ class WarpingManifold:
 
 
     def inverse(self, gam):
-        N = gam.size
-        x = np.linspace(0,1,N)
-        s = interp1d(gam, x)
-        gamI = s(x)
+        """Find inverse of a warping function
+
+        Parameters
+        ----------
+        gam : np.ndarray of shape (n_samples, )
+            Warping function
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            Inverse of the given warping function
+        """
+        # we compute inverse by inverting x and y values of function gamma(t)
+        # in the spline representaion 
+        gamI = np.interp(self.time, gam, self.time)
         gamI = (gamI - gamI[0]) / (gamI[-1] - gamI[0])
         
         return gamI
 
     def center(self, gam):
+        """Implement mean centering of set of warping functions
+
+        Parameters
+        ----------
+        gam : np.ndarray of shape (n_functions, n_samples)
+            Warping functions that needs to be mean centered
+
+        Returns
+        -------
+        np.ndarray of shape (n_samples, )
+            inverse of the mean function of given warping functions
+
+        This function implements the Algortim 1 from the paper:
+        Srivastava, Anuj, et al. "Registration of functional data using Fisher-Rao metric." 
+        arXiv preprint arXiv:1103.3817 (2011).         
+        """
         if gam.ndim > 1:
             T, n = gam.shape
         else:
-            return gamma_inverse(gam)
+            return self.inverse(gam)
 
         psi = np.zeros_like(gam)
         for k in range(0, n):
-            psi[:, k] = np.sqrt(np.gradient(gam[:, k], self.time))
+            grad = np.gradient(gam[:, k], self.time)
+            psi[:, k] = np.sqrt(np.fabs(grad))
 
         # Find Direction
         mnpsi = psi.mean(axis=1)
