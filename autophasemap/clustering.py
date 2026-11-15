@@ -5,10 +5,12 @@ import time, traceback, warnings, datetime
 from collections import namedtuple
 from ortools.graph.python.min_cost_flow import SimpleMinCostFlow
 from sklearn.cluster import kmeans_plusplus
+from sklearn.utils import check_random_state
 import ray
 
 from .geometry import SquareRootSlopeFramework, WarpingManifold
 from .diffusion import DiffusionMaps
+from ._compat import trapezoid
 
 @ray.remote
 def compute_cluster_distance(i, data, eta, **kwargs):
@@ -31,7 +33,9 @@ def compute_cluster_distance(i, data, eta, **kwargs):
         distances to each template.
     """
     SRSF = SquareRootSlopeFramework(data.t)
-    ip_address = ray._private.services.get_node_ip_address()
+    # read (not pop) so every template uses the same alignment settings
+    grid_dim = kwargs.get("grid_dim", 7)
+    lam = kwargs.get("lam", 0.0)
     n_clusters = len(eta)
     di = np.zeros(n_clusters)
     gam_i = np.zeros((n_clusters, data.n_domain))
@@ -39,13 +43,13 @@ def compute_cluster_distance(i, data, eta, **kwargs):
     fi_gam = np.zeros((n_clusters, data.n_domain))
     qi = SRSF.to_srsf(data.F[i])
     for k in range(n_clusters):
-        _gam = SRSF.get_gamma(eta[k], qi, grid_dim=kwargs.pop("grid_dim", 7))
+        _gam = SRSF.get_gamma(eta[k], qi, lam=lam, grid_dim=grid_dim)
 
         _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
         _qik_gam = SRSF.to_srsf(_fik_gam)
-        amplitude = np.sqrt(np.trapz((eta[k] - _qik_gam)**2, data.t))
+        amplitude = np.sqrt(trapezoid((eta[k] - _qik_gam)**2, data.t))
         gam_dev = np.gradient(_gam, data.t)
-        theta = np.trapz(np.sqrt(gam_dev), x=data.t)
+        theta = trapezoid(np.sqrt(gam_dev), x=data.t)
         phase = np.arccos(np.clip(theta, -1, 1))  
 
         di[k] = amplitude
@@ -121,9 +125,10 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     SRSF = SquareRootSlopeFramework(data.t)
     center = SRSF.warp_q_gamma(template, gam_inv)
     qi = SRSF.to_srsf(data.F[i])
-    _gam = SRSF.get_gamma(center, 
-                        qi, 
-                        grid_dim=kwargs.pop("grid_dim", 7)
+    _gam = SRSF.get_gamma(center,
+                        qi,
+                        lam=kwargs.get("lam", 0.0),
+                        grid_dim=kwargs.get("grid_dim", 7)
                         )
     _fik_gam = SRSF.warp_f_gamma(data.F[i], _gam)
     _qik_gam = SRSF.to_srsf(_fik_gam)
@@ -131,13 +136,14 @@ def center_to_template(i, data, template, gam_inv, **kwargs):
     return i, _gam, _fik_gam, _qik_gam
 
 
-def get_Mk(data, delta_n, k):
+def get_Mk(data, delta_n, k, random_state=None):
     Mk = np.argwhere(delta_n==k)
     _len, _ = Mk.shape
     # if a cluster doesn't have any points, assign a random one
     if _len == 0:
         warnings.warn("No points in the cluster...")
-        Mk = np.random.choice(np.arange(data.N), 2)
+        rng = check_random_state(random_state)
+        Mk = rng.choice(np.arange(data.N), 2)
     else:
         Mk = Mk.reshape(
             _len,
@@ -149,13 +155,15 @@ def assign_clusters(data, d_amplitude, smoothen=True, **kwargs):
     N, p = d_amplitude.shape
     
     if smoothen:
-        diffmap = DiffusionMaps(data.C, k=kwargs.pop("k", 3))
-        
+        diffmap = DiffusionMaps(data.C, k=kwargs.get("k", 3))
+        # read (not pop) so every cluster uses the same number of frequencies
+        num_freq = kwargs.get("num_freq", 30)
+
         dist = np.zeros((N, p))
         for i in range(p):
             s = d_amplitude[:,i]
-            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s, 
-                                                                     num_freq=kwargs.pop("num_freq", 30))
+            s_norm, s_hat, s_tilda = diffmap.get_asymptotic_function(s,
+                                                                     num_freq=num_freq)
             dist[:,i] = s_tilda
     else:
         dist = d_amplitude
@@ -164,7 +172,8 @@ def assign_clusters(data, d_amplitude, smoothen=True, **kwargs):
     
     return dist, labels
     
-def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, threshold=1e-2, **kwargs):
+def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothen=True, threshold=1e-2,
+                           random_state=None, **kwargs):
     """Compute elastic kmeans 
     
     This function computes a elastic k-means based approximation of the template functions.
@@ -182,11 +191,16 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
     smoothen : Boolean (default, True)
         Boolean variable to use Diffusion based assignment
     threshold : float (default, 1e-2)
-        Error threshold for early termination    
+        Error threshold for early termination
+    random_state : None, int or numpy.random.RandomState (default, None)
+        Seeds the random choice used when a cluster becomes empty.
+        None uses the global numpy random state (previous behaviour).
 
     other named arguments are passed into following functions:
-        SquareRootSlopeFramework.get_gamma : lam, grid_dim
-        
+        SquareRootSlopeFramework.get_gamma : lam (default 0.0), grid_dim (default 7)
+        DiffusionMaps : k (default 3), number of nearest neighbors of the composition graph
+        DiffusionMaps.get_asymptotic_function : num_freq (default 30)
+
     Returns:
     ========
     res : namedtuple
@@ -207,7 +221,8 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
                                                                                                 
     """
     DATA_RAY = ray.put(data)
-    
+    random_state = check_random_state(random_state)
+
     SRSF = SquareRootSlopeFramework(data.t)
     manifold = WarpingManifold(data.t)
     
@@ -231,7 +246,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
 
         #step 2c
         for k in range(n_clusters):
-            Mk = get_Mk(data, delta_n, k)
+            Mk = get_Mk(data, delta_n, k, random_state=random_state)
             gam_inv = manifold.center(gam_ik[Mk,k,:].T)
             results_ids = [center_to_template.remote(i, DATA_RAY, eta[k], gam_inv, **kwargs) for i in Mk]
             results = ray.get(results_ids)
@@ -244,7 +259,7 @@ def compute_elastic_kmeans(data, random_sample, max_iter=100, verbose=1, smoothe
         eta_new = []
         templates = []
         for k in range(n_clusters):
-            Mk = get_Mk(data, delta_n, k)
+            Mk = get_Mk(data, delta_n, k, random_state=random_state)
             mean_fk = fik_gam[Mk,k,:].mean(axis=0)
             templates.append(mean_fk)
             eta_new.append(SRSF.to_srsf(mean_fk))
@@ -294,13 +309,37 @@ def _is_same_clustering(labels1, labels2, n_clusters):
         
     return True
 
-def multi_kmeans_run(n_runs, data, n_clusters, **kwargs):
+def multi_kmeans_run(n_runs, data, n_clusters, random_state=None, **kwargs):
+    """Run elastic k-means from several k-means++ initializations and keep the best.
+
+    Parameters
+    ----------
+    n_runs : int
+        Number of random initializations.
+    data : BaseDataSet
+        autophasemap data set object.
+    n_clusters : int
+        Number of clusters (phases).
+    random_state : None, int or numpy.random.RandomState (default, None)
+        Seeds the k-means++ initializations and the empty-cluster fallback.
+        None uses the global numpy random state (previous behaviour).
+    **kwargs
+        Passed to `compute_elastic_kmeans`.
+
+    Returns
+    -------
+    best_res : namedtuple
+        Output of `compute_elastic_kmeans` for the best run.
+    bic : list of float
+        BIC of every run that was performed.
+    """
+    random_state = check_random_state(random_state)
     best_error, best_labels = None, None
     bic = []
     for i in range(n_runs):
         # select random samples from design space using /sklearn/cluster/_kmeans.py#L72
-        _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters)
-        res = compute_elastic_kmeans(data, random_sample, **kwargs)
+        _, random_sample = kmeans_plusplus(data.C, n_clusters=n_clusters, random_state=random_state)
+        res = compute_elastic_kmeans(data, random_sample, random_state=random_state, **kwargs)
         verbose = kwargs.get("verbose", 3)
         bic.append(compute_BIC(data, res.fik_gam, res.qik_gam, res.delta_n))
         if best_error is None or (
@@ -349,7 +388,7 @@ def amplitude_fpca(time, Q, F, n_components):
     return coeff, eigs
 
 
-def compute_BIC(data, fik_gam, qik_gam, delta_n):
+def compute_BIC(data, fik_gam, qik_gam, delta_n, n_components=20):
     """Compute Bayesian information criteria.
     
     Parameters:
@@ -361,15 +400,18 @@ def compute_BIC(data, fik_gam, qik_gam, delta_n):
         qik_gam : numpy array of shape (n_samples, n_clusters, n_domain)
             Aligned SRSFs of functional data.
         delta_n : array-like, shape=[n_samples,]
-            Cluster memberships.   
-            
+            Cluster memberships.
+        n_components : int (default, 20)
+            Number of amplitude fPCA components. Capped at n_domain + 1,
+            the number of components available.
+
     Returns:
     =======
         BIC : float
             Computed BIC of the clustering.
-                     
+
     """
-    n_components = 20
+    n_components = min(n_components, data.n_domain + 1)
     K = len(np.unique(delta_n))
     vfpca = []
 
@@ -387,6 +429,8 @@ def compute_BIC(data, fik_gam, qik_gam, delta_n):
     # BIC
     explained_variance = explained_variance.mean(axis=0)
     d = np.where(explained_variance >= 0.99)[0][0]
+    # keep at least one component when the first one already explains >= 99%
+    d = max(d, 1)
 
     mu = np.zeros((d,K))
     C = np.zeros((d,d,K))

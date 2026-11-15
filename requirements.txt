@@ -8,4 +8,5 @@ pandas
 PyGSP
 ray
 scikit-learn
-scipy
+scipy>=1.6
+warping @ git+https://github.com/kiranvad/warping.git@v1.0.0

@@ -5,9 +5,10 @@ This repository hosts the supporting code for the following paper.
 To install the package:
 
 ```bash
-pip install git+https://github.com/kiranvad/warping.git 
 pip install git+https://github.com/pozzo-research-group/autophasemap.git 
 ```
+
+This also installs the [warping](https://github.com/kiranvad/warping) dependency, which compiles a C extension, so a C compiler is required (e.g. Xcode command line tools on macOS).
 
 A simple example using synthetic Gaussian functions as an example can be found in [this ](/example.ipynb)notebook. This example can be run on your local machine once the `autophasemap` package is installed using similar instructions as above.
 

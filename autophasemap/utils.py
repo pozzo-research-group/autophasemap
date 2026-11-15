@@ -5,6 +5,7 @@ from collections import namedtuple
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist 
 from .clustering import assign_clusters
+from ._compat import trapezoid
 import numpy as np 
 
 class BaseDataSet(abc.ABC):
@@ -55,7 +56,7 @@ class BaseDataSet(abc.ABC):
             norm : float 
                 Norm of the function
         """
-        norm = np.sqrt(np.trapz(f**2, t))
+        norm = np.sqrt(trapezoid(f**2, t))
         
         return norm
     
