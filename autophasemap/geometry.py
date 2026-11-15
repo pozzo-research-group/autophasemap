@@ -1,7 +1,8 @@
 import numpy as np
 import optimum_reparamN2 as orN2
 import scipy.interpolate as interp
-from scipy.integrate import cumtrapz
+
+from ._compat import trapezoid, cumulative_trapezoid
 
 class SquareRootSlopeFramework:
     """Square Root Slope Framework (SRSF)
@@ -61,7 +62,7 @@ class SquareRootSlopeFramework:
                 Discrete evaluation of a function            
         """        
         integrand = q*np.fabs(q)
-        f = f0 + cumtrapz(integrand,self.time,initial=0)
+        f = f0 + cumulative_trapezoid(integrand,self.time,initial=0)
         
         return f
 
@@ -173,7 +174,7 @@ class WarpingManifold:
         float
             Inner product between the two tangent vectors
         """
-        ip = np.trapz(tangent_vec_a*tangent_vec_b, self.time)
+        ip = trapezoid(tangent_vec_a*tangent_vec_b, self.time)
     
         return ip
 
@@ -326,7 +327,7 @@ class WarpingManifold:
             mu = self.exp(mu, stp * vbar)
             itr += 1
 
-        gam_mu = cumtrapz(mu * mu, self.time, initial=0)
+        gam_mu = cumulative_trapezoid(mu * mu, self.time, initial=0)
         gam_mu = (gam_mu - gam_mu.min()) / (gam_mu.max() - gam_mu.min())
         gamI = self.inverse(gam_mu)
 

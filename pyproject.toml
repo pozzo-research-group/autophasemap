@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autophasemap"
+version = "1.1.0"
+description = "Automatic Structure Phase Mapping from Functional Data"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Kiran Vaddi", email = "kiranvad@uw.edu" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy",
+    "scipy>=1.6",            # scipy.integrate.cumulative_trapezoid
+    "scikit-learn>=0.24",    # sklearn.cluster.kmeans_plusplus
+    "matplotlib",
+    "ortools>=9.4",          # ortools.graph.python.min_cost_flow
+    "pygsp",
+    "ray",
+    # provides optimum_reparamN2; compiles a C extension, so a C compiler is required
+    "warping @ git+https://github.com/kiranvad/warping.git@v1.0.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+notebook = ["jupyter"]
+
+[project.urls]
+Paper = "https://pubs.rsc.org/en/content/articlelanding/2023/dd/d3dd00105a"
+Source = "https://github.com/pozzo-research-group/autophasemap"
+
+[tool.setuptools.packages.find]
+include = ["autophasemap*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
