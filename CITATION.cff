@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "autophasemap"
+type: software
+authors:
+  - name: "Pozzo Research Group, University of Washington"
+repository-code: "https://github.com/pozzo-research-group/autophasemap"
+url: "https://pozzorg.com"
+preferred-citation:
+  type: article
+  title: "Metric geometry tools for automatic structure phase map generation"
+  authors:
+    - family-names: "Vaddi"
+      given-names: "Kiran"
+    - family-names: "Li"
+      given-names: "Karen"
+    - family-names: "Pozzo"
+      given-names: "Lilo D."
+  journal: "Digital Discovery"
+  year: 2023
+  volume: "2"
+  issue: "5"
+  start: "1471"
+  end: "1483"
+  doi: "10.1039/d3dd00105a"
