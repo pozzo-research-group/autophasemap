@@ -1,4 +1,7 @@
 ## Automatic Structure Phase Map (autophasemap) generation
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24484864.svg)](https://doi.org/10.5281/zenodo.24484864)
+
 This repository hosts the supporting code for the following paper.
 [Metric geometry tools for automatic structure phase map generation](https://pubs.rsc.org/en/content/articlelanding/2023/dd/d3dd00105a) by Kiran Vaddi, Karen Li, and Lilo D Pozzo.
 
